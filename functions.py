@@ -3,6 +3,7 @@ import Bio
 import math
 import pandas as pd
 import requests
+import io
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from Bio.PDB.MMCIFParser import MMCIFParser
@@ -11,7 +12,10 @@ from Bio.PDB.MMCIF2Dict import MMCIF2Dict
 def get_mmcif(uniprot):
     response = requests.get(f"https://alphafold.ebi.ac.uk/api/prediction/{uniprot}").json()
     mmcif_url = response[0]['cifUrl']
-    return mmcif_url
+
+    response = requests.get(mmcif_url)
+
+    return response.text
 
 def mmcif_to_df(filename):
     sonic_dict = MMCIF2Dict(filename)
@@ -94,7 +98,12 @@ def get_integers_around(x,buffer):
 
     return list(range(math.ceil(lower),math.ceil(upper)))
     
+def uniprot_to_visualize(uniprot,size=20,buffersize=1):
+    mmcif = get_mmcif(uniprot)
 
+    df = mmcif_to_df(io.StringIO(mmcif))
+    array = create_array(df,size,buffersize)
+    visualize_array(array)
 
 if __name__ == "__main__":
     # df = mmcif_to_df('pdb_files/6pjv.cif')
@@ -103,6 +112,5 @@ if __name__ == "__main__":
     # print(array.shape)
     # visualize_array(array)
 
-    resp = get_mmcif("P01857")
-    print(resp)
+    resp = uniprot_to_visualize("P01691")
 
