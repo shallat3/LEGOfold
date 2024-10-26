@@ -2,10 +2,16 @@ import numpy as np
 import Bio
 import math
 import pandas as pd
+import requests
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3d
+from mpl_toolkits.mplot3d import Axes3D
 from Bio.PDB.MMCIFParser import MMCIFParser
 from Bio.PDB.MMCIF2Dict import MMCIF2Dict
+
+def get_mmcif(uniprot):
+    response = requests.get(f"https://alphafold.ebi.ac.uk/api/prediction/{uniprot}").json()
+    mmcif_url = response[0]['cifUrl']
+    return mmcif_url
 
 def mmcif_to_df(filename):
     sonic_dict = MMCIF2Dict(filename)
@@ -40,8 +46,8 @@ def create_array(coords_df, size=20, buffersize=1):
     coords_df['x'] = coords_df['x']*factor
     coords_df['y'] = coords_df['y']*factor
     #divide by two for the z coordinate, 
-    # because lego brings are 2x taller than they are wide
-    coords_df['z'] = (coords_df['z']*factor) / 2
+    # because lego brings are 1.2x taller than they are wide
+    coords_df['z'] = (coords_df['z']*factor) / 1.2
 
     # get Height
     height = math.ceil(coords_df['z'].max())
@@ -69,18 +75,34 @@ def create_array(coords_df, size=20, buffersize=1):
                         
     return array_3d
 
+def visualize_array(array):
+    data = array
+    axes=list(array.shape)
+    alpha = 0.9
 
+    colors = np.empty(axes + [4], dtype=np.float32)
+    colors[:] = [1, 0, 0, alpha]  # red
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111,projection='3d')
+    ax.voxels(data, facecolors=colors, edgecolors='grey')
+    plt.show()
 
 def get_integers_around(x,buffer):
     lower = x - buffer/2
     upper = x + buffer/2
 
     return list(range(math.ceil(lower),math.ceil(upper)))
-
+    
 
 
 if __name__ == "__main__":
-    df = mmcif_to_df('pdb_files/6pjv.cif')
-    array = create_array(df)
-    print(array.sum())
+    # df = mmcif_to_df('pdb_files/6pjv.cif')
+    # array = create_array(df, buffersize=1.5)
+    # print(array.sum())
+    # print(array.shape)
+    # visualize_array(array)
+
+    resp = get_mmcif("P01857")
+    print(resp)
 
