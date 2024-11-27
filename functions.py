@@ -5,8 +5,12 @@ import pandas as pd
 import requests
 import io
 import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
+from matplotlib.ticker import MultipleLocator, FixedLocator
+from PIL import Image,ImageFont
+from pathlib import Path
+from helpers import get_integers_around
 from mpl_toolkits.mplot3d import Axes3D
-from Bio.PDB.MMCIFParser import MMCIFParser
 from Bio.PDB.MMCIF2Dict import MMCIF2Dict
 
 def get_mmcif(uniprot):
@@ -92,12 +96,29 @@ def visualize_array(array):
     ax.voxels(data, facecolors=colors, edgecolors='grey')
     plt.show()
 
-def get_integers_around(x,buffer):
-    lower = x - buffer/2
-    upper = x + buffer/2
+def make_slices(array,uniprot):
+    folder_path = Path(f'{uniprot}/slices')
+    folder_path.mkdir(parents=True,exist_ok=True)
 
-    return list(range(math.ceil(lower),math.ceil(upper)))
-    
+    for i in range(array.shape[2]):
+        image = array[:,:,i]
+        cmap = ListedColormap(['red','white','green'])
+        norm = plt.Normalize(vmin=-1.5, vmax=1.5)
+        plt.matshow(image,cmap=cmap, norm=norm)
+        plt.xticks(np.arange(-0.5, image.shape[1], 1), labels=np.arange(0, image.shape[1]+1, 1))
+        plt.yticks(np.arange(-0.5, image.shape[0], 1), labels=np.arange(0, image.shape[0]+1, 1))
+        plt.grid(which='major', color='black', linestyle='-', linewidth=1)
+        plt.grid(which='minor', color='gray', linestyle='--', linewidth=0.5)
+
+        
+        plt.savefig(f'{uniprot}/slices/{i}.png')
+        plt.clf()
+
+def mmcif_to_visualize(filename,size=20,buffersize=1):
+    df = mmcif_to_df(filename)
+    array = create_array(df,size,buffersize)
+    visualize_array(array)
+
 def uniprot_to_visualize(uniprot,size=20,buffersize=1):
     mmcif = get_mmcif(uniprot)
 
@@ -105,12 +126,35 @@ def uniprot_to_visualize(uniprot,size=20,buffersize=1):
     array = create_array(df,size,buffersize)
     visualize_array(array)
 
-if __name__ == "__main__":
-    # df = mmcif_to_df('pdb_files/6pjv.cif')
-    # array = create_array(df, buffersize=1.5)
-    # print(array.sum())
-    # print(array.shape)
-    # visualize_array(array)
+def array_to_overhang(array):
+    overhang_array = np.copy(array)
 
-    resp = uniprot_to_visualize("P01691")
+    for x in range(array.shape[0]):
+        for y in range(array.shape[1]):
+            for z in range(array.shape[2]):
+                if z > 0 and z < array.shape[2] - 1:
+                    if overhang_array[x][y][z] == 1 and array[x][y][z-1] == 0 and array[x][y][z+1] == 0:
+                        overhang_array[x][y][z] *= -1
+
+                if z == array.shape[2] - 1:
+                    if overhang_array[x][y][z] == 1 and array[x][y][z-1] == 0:
+                        overhang_array[x][y][z] *= -1
+    return overhang_array
+
+
+
+if __name__ == "__main__":
+    human_myosin = "P12882"
+    # iga = "P01876"
+    # mmcif = get_mmcif(iga)
+
+    # df = mmcif_to_df(io.StringIO(mmcif))
+    # array = create_array(df)
+    # overhangarray = array_to_overhang(array)
+
+    # make_slices(overhangarray,iga)
+
+    uniprot_to_visualize(human_myosin)
+
+    #resp = mmcif_to_visualize("pdb_files/1iga_updated.cif",size=100,buffersize=2)
 
