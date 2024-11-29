@@ -8,7 +8,7 @@ import requests
 import io
 import matplotlib.pyplot as plt
 import networkx as nx
-from matplotlib.colors import ListedColormap,LinearSegmentedColormap, TwoSlopeNorm,BoundaryNorm
+from matplotlib.colors import ListedColormap,LinearSegmentedColormap, TwoSlopeNorm,BoundaryNorm,Normalize
 from matplotlib.ticker import MultipleLocator, FixedLocator
 from helpers import get_integers_around
 from PIL import Image,ImageFont
@@ -186,9 +186,41 @@ class LegoProtein:
         colors = np.empty(axes + [4], dtype=np.float32)
         colors[:] = [1, 0, 0, alpha]  # red
 
-        fig = plt.figure()
+        fig = plt.figure(figsize=(8, 8))
         ax = fig.add_subplot(111,projection='3d')
         ax.voxels(data, facecolors=colors, edgecolors='grey')
+        plt.show()
+
+    def visualize_piece_array(self):
+        data = self.pieces_visual_array
+        voxels = data != 0
+
+        discrete_colors = ['red', 'white', 'yellow']  # Colors for discrete ranges
+        discrete_cmap = ListedColormap(discrete_colors)
+
+        continuous_cmap = LinearSegmentedColormap.from_list('smooth', ['yellow', 'green', 'blue'])
+
+        # Step 3: Define boundaries and normalization
+        boundaries = [-0.5,0.5]  # Discrete range boundaries
+        norm_discrete = BoundaryNorm(boundaries, len(discrete_colors), extend='both')
+        norm_continuous = Normalize(vmin=0, vmax=256)  # Linear gradient in the range [0, 2]
+
+        # Start with discrete colors
+        facecolors = discrete_cmap(norm_discrete(data))
+
+        # Overlay the continuous region
+        continuous_mask = (data > 0.5)  # Region for continuous mapping
+        facecolors[continuous_mask] = continuous_cmap(norm_continuous(data[continuous_mask]))
+
+        # Make non-visible voxels transparent
+        voxels = data != 0  # Define visible voxels
+        facecolors[~voxels] = [0, 0, 0, 0]  # Transparent for invisible voxels
+
+        # Step 5: Plot the voxels
+        fig = plt.figure(figsize=(8, 8))
+        ax = fig.add_subplot(111, projection='3d')
+        ax.voxels(voxels, facecolors=facecolors, edgecolor='k')
+
         plt.show()
 
     def make_overhang_slices(self):
