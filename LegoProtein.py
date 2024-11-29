@@ -8,7 +8,7 @@ import requests
 import io
 import matplotlib.pyplot as plt
 import networkx as nx
-from matplotlib.colors import ListedColormap
+from matplotlib.colors import ListedColormap,LinearSegmentedColormap, TwoSlopeNorm,BoundaryNorm
 from matplotlib.ticker import MultipleLocator, FixedLocator
 from helpers import get_integers_around
 from PIL import Image,ImageFont
@@ -22,6 +22,7 @@ class LegoProtein:
         self.size = size
         self.uniprot = uniprot
         self.buffersize=buffersize
+        self.piece_dimensions_overhang = [(4,1),(1,4),(3,2),(2,3),(2,2),(1,3),(3,1),(2,1),(1,2)]
         self.piece_dimension_list = [(12,1),(1,12),(8,1),(1,8),(2,6),(6,2),(2,4),(4,2),(6,1),(1,6),(4,1),(1,4),(3,2),(2,3),(2,2),(1,3),(3,1),(2,1),(1,2),(1,1)]
         if filename:
             self.filename = filename
@@ -40,13 +41,27 @@ class LegoProtein:
         self.z_dim = self.array.shape[2]
 
         self.overhangarray = self.__array_to_overhang()
+        self.pieces_visual_array = self.overhangarray
 
         self.piecearray = self.__placepieces()
 
 
     def __placepieces(self):
-        filled = self.array.copy()
+        filled = self.overhangarray.copy().astype(object)
+        print(np.sum(filled==-1))
+        for piece in self.piece_dimensions_overhang:
+            for z in range(self.z_dim):
+                for x in range(self.x_dim):
+                    for y in range(self.y_dim):
+                        if self.__can_place(filled,piece,x,y,z) and np.sum(filled[x:x+piece[0],y:y+piece[1],z]) < piece[0]*piece[1]:
+                            
+                            legopiece = LegoPiece(piece,(x,y,z))
+                            self.pieces_visual_array[x:x+piece[0],y:y+piece[1],z] = legopiece.color
+                            filled[x:x+piece[0],y:y+piece[1],z] = legopiece
+                            self.__add_connections(filled,legopiece)
+                            self.pieces.append(legopiece)
 
+        print(np.sum(filled==-1))
         for piece in self.piece_dimension_list:
 
             for z in range(self.z_dim):
@@ -55,6 +70,7 @@ class LegoProtein:
                         if self.__can_place(filled,piece,x,y,z):
                             legopiece = LegoPiece(piece,(x,y,z))
                             filled[x:x+piece[0],y:y+piece[1],z] = legopiece
+                            self.pieces_visual_array[x:x+piece[0],y:y+piece[1],z] = legopiece.color
                             self.__add_connections(filled,legopiece)
                             self.pieces.append(legopiece)
 
@@ -84,7 +100,8 @@ class LegoProtein:
     
     def __can_place(self,filled,dimensions,x,y,z):
         try:
-            if (filled[x:(x+dimensions[0]),y:(y+dimensions[1]),z] == 1).all() and x+dimensions[0] - 1<filled.shape[0] and y+dimensions[1] - 1 < filled.shape[1]:
+            if ((np.abs(filled[x:(x+dimensions[0]),y:(y+dimensions[1]),z]) == 1).all() 
+            and x+dimensions[0] - 1<filled.shape[0] and y+dimensions[1] - 1 < filled.shape[1] and (filled[x:(x+dimensions[0]),y:(y+dimensions[1]),z] == 1).any()):
                 return True
             else:
                 return False
@@ -140,7 +157,7 @@ class LegoProtein:
 
         print(self.coords_df.head())
 
-        array_3d = np.zeros((self.size,self.size,height),dtype=object)
+        array_3d = np.zeros((self.size,self.size,height))
 
         print(array_3d.shape)
 
@@ -174,12 +191,12 @@ class LegoProtein:
         ax.voxels(data, facecolors=colors, edgecolors='grey')
         plt.show()
 
-    def make_slices(self):
+    def make_overhang_slices(self):
         folder_path = Path(f'{self.uniprot}/slices')
         folder_path.mkdir(parents=True,exist_ok=True)
 
-        for i in range(self.array.shape[2]):
-            image = self.array[:,:,i]
+        for i in range(self.overhangarray.shape[2]):
+            image = self.overhangarray[:,:,i]
             cmap = ListedColormap(['red','white','green'])
             norm = plt.Normalize(vmin=-1.5, vmax=1.5)
             plt.matshow(image,cmap=cmap, norm=norm)
@@ -188,8 +205,48 @@ class LegoProtein:
             plt.grid(which='major', color='black', linestyle='-', linewidth=1)
             plt.grid(which='minor', color='gray', linestyle='--', linewidth=0.5)
 
-            
+            plt.xlabel('x')
+            plt.ylabel('y')
             plt.savefig(f'{self.uniprot}/slices/{i}.png')
+            plt.clf()
+
+    def make_lego_slices(self):
+        self.pieces_visual_array[np.where(np.abs(self.pieces_visual_array) < 0.5)] = 0
+        folder_path = Path(f'{self.uniprot}/legoslices')
+        folder_path.mkdir(parents=True,exist_ok=True)
+        discrete_colors = ['red', 'white','yellow']  # Colors for discrete ranges
+        discrete_cmap = ListedColormap(discrete_colors)
+
+        # Step 2: Define the continuous colormap (smooth transition for positive values)
+        continuous_cmap = LinearSegmentedColormap.from_list('smooth', ['blue', 'yellow'])
+
+        # Step 3: Define boundaries and normalizations
+        boundaries = [-0.5, 0.5]  # Edges for discrete ranges
+        norm_discrete = BoundaryNorm(boundaries, len(discrete_colors), extend='both')
+        norm_continuous = plt.Normalize(1, 255) 
+
+    
+        for i in range(self.pieces_visual_array.shape[2]):
+            image = self.pieces_visual_array[:,:,i]
+            
+            if i == 8:
+                print(image)
+            
+            # Plot
+            plt.matshow(image, cmap=discrete_cmap, norm=norm_discrete)
+            mask = image > 0.5  # Mask for the continuous section
+            masked_data = np.ma.masked_where(~mask, image)
+            ax = plt.gca()
+            mappable_continuous = ax.matshow(masked_data, cmap=continuous_cmap, norm=norm_continuous)
+
+            plt.xticks(np.arange(-0.5, image.shape[1], 1), labels=np.arange(0, image.shape[1]+1, 1))
+            plt.yticks(np.arange(-0.5, image.shape[0], 1), labels=np.arange(0, image.shape[0]+1, 1))
+            plt.grid(which='major', color='black', linestyle='-', linewidth=1)
+            plt.grid(which='minor', color='gray', linestyle='--', linewidth=0.5)
+
+            plt.xlabel('x')
+            plt.ylabel('y')
+            plt.savefig(f'{self.uniprot}/legoslices/{i}.png')
             plt.clf()
 
     def connection_graph(self):
