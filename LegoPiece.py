@@ -9,7 +9,7 @@ class LegoPiece:
         self.connected_set = set()
         self.pieceid=f"{dimensions}at{coordinates}"
 
-        self.color = rand.randint(1,255)
+        self.color = rand.randint(2,255)
 
     def add_connection(self,piece):
         self.connected_set.add(piece)
